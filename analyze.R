@@ -90,12 +90,24 @@ ggplot(tmp, aes(x=race, y=perc, fill=kind)) +
   ggsave("./plots/2percent.png") +
   ggsave("./plots/2percent.pdf")
 
-
-
 ggplot(by.race, aes(x=race, y=controlled)) +
   geom_bar(stat="identity") +
   ggtitle("percent of police shootings by race after\ncontrolling for US racial breakdown") +
   ggsave("./plots/3control.png") +
   ggsave("./plots/3control.pdf")
+
+
+tmp %<>% left_join(select(by.race, race, percent.pop))
+tmp$controlled <- tmp$perc / tmp$percent.pop
+tmp[tmp$kind=="unarmed",]$controlled <- tmp[tmp$kind=="unarmed",]$controlled/sum(tmp[tmp$kind=="unarmed",]$controlled)
+tmp[tmp$kind!="unarmed",]$controlled <- tmp[tmp$kind!="unarmed",]$controlled/sum(tmp[tmp$kind$="unarmed",]$controlled)
+
+
+ggplot(tmp, aes(x=race, y=controlled, fill=kind)) +
+  geom_bar(stat="identity", position="dodge") +
+  ggtitle("percent of police shootings by race") +
+  ggsave("./plots/4controlled.png") +
+  ggsave("./plots/4controlled.pdf")
+
 
 
