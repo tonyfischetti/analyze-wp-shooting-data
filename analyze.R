@@ -100,12 +100,12 @@ ggplot(by.race, aes(x=race, y=controlled)) +
 tmp %<>% left_join(select(by.race, race, percent.pop))
 tmp$controlled <- tmp$perc / tmp$percent.pop
 tmp[tmp$kind=="unarmed",]$controlled <- tmp[tmp$kind=="unarmed",]$controlled/sum(tmp[tmp$kind=="unarmed",]$controlled)
-tmp[tmp$kind!="unarmed",]$controlled <- tmp[tmp$kind!="unarmed",]$controlled/sum(tmp[tmp$kind$="unarmed",]$controlled)
+tmp[tmp$kind!="unarmed",]$controlled <- tmp[tmp$kind!="unarmed",]$controlled/sum(tmp[tmp$kind!="unarmed",]$controlled)
 
 
 ggplot(tmp, aes(x=race, y=controlled, fill=kind)) +
   geom_bar(stat="identity", position="dodge") +
-  ggtitle("percent of police shootings by race") +
+  ggtitle("percent of police shootings by race after\ncontrolling for US racial breakdown") +
   ggsave("./plots/4controlled.png") +
   ggsave("./plots/4controlled.pdf")
 
