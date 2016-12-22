@@ -93,40 +93,17 @@ dat %>% filter(!is.na(armp)) %>% filter(race=="Black") %>% {.$armp} -> black
 dat %>% filter(!is.na(armp)) %>% filter(race=="White") %>% {.$armp} -> white
 
 library(boot)
-das.boot <- boot(black, function(x, i){
-                          sum(!x[i])/length(black)
-                        }, 100000, 
+das.boot <- boot(black, function(x, i){ sum(!x[i])/length(black) }, 100000, 
                  parallel="multicore", ncpus=4)
 boot.ci(das.boot, type="bca") -> bcablack
 
-das.boot <- boot(white, function(x, i){
-                          sum(!x[i])/length(white)
-                        }, 100000, 
+das.boot <- boot(white, function(x, i){ sum(!x[i])/length(white) }, 100000, 
                  parallel="multicore", ncpus=4)
 boot.ci(das.boot, type="bca") -> bcawhite
 
 
-blackboot <- numeric(500000)
-for(i in 1:500000){
-  samp <- base::sample(black, size=length(black), replace=TRUE)
-  perc <- sum(!samp)/length(samp)
-  blackboot[i] <- perc
-}
-# hist(blackboot)
-
-whiteboot <- numeric(500000)
-for(i in 1:500000){
-  samp <- base::sample(white, size=length(white), replace=TRUE)
-  perc <- sum(!samp)/length(samp)
-  whiteboot[i] <- perc
-}
-# hist(whiteboot)
-
-quantile(blackboot, probs=c(0.025, 0.975))
-quantile(whiteboot, probs=c(0.025, 0.975))
-quantile(blackboot, probs=c(0.025, 0.975)) -> bl
-quantile(whiteboot, probs=c(0.025, 0.975)) -> wl
-limits <- aes(ymax = c(bl[2], wl[2]), ymin=c(bl[1], wl[1]))
+limits <- aes(ymax = c(bcablack$bca[5], bcawhite$bca[5]),
+              ymin=c(bcablack$bca[4], bcawhite$bca[4]))
 
 tmp %>% filter(race=="White" | race=="Black") %>% filter(key=="unarmed") %>%
 ggplot(aes(x=race, y=value, fill=race)) +
@@ -136,21 +113,6 @@ ggplot(aes(x=race, y=value, fill=race)) +
   ggtitle("          Percent of unarmed victims shot by police by race") +
   ggsave("./plots/4.png") +
   ggsave("./plots/4.pdf")
-
-
-
-
-
-limits <- aes(ymax = c(bcablack[2], bcawhite[2]), ymin=c(bcablack[1], bcawhite[1]))
-
-tmp %>% filter(race=="White" | race=="Black") %>% filter(key=="unarmed") %>%
-ggplot(aes(x=race, y=value, fill=race)) +
-  geom_bar(stat="identity") + #, position="dodge") +
-  geom_errorbar(limits, width=.25) +
-  ylab("percent of unarmed victims") +
-  ggtitle("          Percent of unarmed victims shot by police by race") +
-  ggsave("./plots/5.png") +
-  ggsave("./plots/5.pdf")
 
 
 
