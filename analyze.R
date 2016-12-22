@@ -104,13 +104,15 @@ boot.ci(das.boot, type="bca") -> bcawhite
 
 limits <- aes(ymax = c(bcablack$bca[5], bcawhite$bca[5]),
               ymin=c(bcablack$bca[4], bcawhite$bca[4]))
+limits <- aes(ymax = c(bcablack$bca[5]*100, bcawhite$bca[5]*100),
+              ymin=c(bcablack$bca[4]*100, bcawhite$bca[4]*100))
 
 tmp %>% filter(race=="White" | race=="Black") %>% filter(key=="unarmed") %>%
-ggplot(aes(x=race, y=value, fill=race)) +
+ggplot(aes(x=race, y=value*100, fill=race)) +
   geom_bar(stat="identity") + #, position="dodge") +
   geom_errorbar(limits, width=.25) +
   ylab("percent of unarmed victims") +
-  ggtitle("          Percent of unarmed victims shot by police by race") +
+  ggtitle("              Percent of unarmed victims shot by police by race") +
   ggsave("./plots/4.png") +
   ggsave("./plots/4.pdf")
 
