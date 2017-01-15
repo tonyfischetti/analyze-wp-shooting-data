@@ -16,6 +16,7 @@ rm(list=ls())
 options(echo=TRUE)
 options(stringsAsFactors=FALSE)
 options(datatable.fread.datatable=FALSE)
+options(mc.cores = parallel::detectCores())
 
 # cli args
 args <- commandArgs(trailingOnly=TRUE)
@@ -58,16 +59,19 @@ dat %>%
   mutate(controlled_percent=controlled_percent/sum(controlled_percent)) -> by.race
 
 
-ggplot(by.race, aes(x=race, y=percent, fill=race)) +
-  geom_bar(stat="identity") +
-  ggtitle("percent of police shootings by race") +
+ggplot(by.race, aes(x=race, y=percent*100)) +
+  # geom_bar(stat="identity") +
+  geom_bar(stat="identity", fill="#0072B2") +
+  ggtitle("                              Percent of police shootings by race") +
+  ylab("percent") +
   ggsave("./plots/1.png") +
   ggsave("./plots/1.pdf")
 
 
-ggplot(by.race, aes(x=race, y=controlled_percent, fill=race)) +
-  geom_bar(stat="identity") +
-  ggtitle("percent of police shootings by race (controlled by size of race)") +
+ggplot(by.race, aes(x=race, y=controlled_percent)) +
+  # geom_bar(stat="identity") +
+  geom_bar(stat="identity", fill="#0072B2") +
+  ggtitle("             Percent of police shootings by race (controlled by size of race)") +
   ylab("") + theme(axis.text.y = element_blank(), axis.ticks = element_blank()) + 
   ggsave("./plots/2.png") +
   ggsave("./plots/2.pdf")
@@ -80,9 +84,10 @@ by.race %>%
   gather(-race, key = "key", value = "value") %>%
   mutate(key=ifelse(key=="percent.armed", "armed", "unarmed"))-> tmp
 
-ggplot(tmp, aes(x=race, y=value, fill=key)) +
+ggplot(tmp, aes(x=race, y=value*100, fill=key)) +
   geom_bar(stat="identity") + #, position="dodge") +
-  ggtitle("percent of police shootings by race by armed status") +
+  ggtitle("          Percent of police shootings by race by armed status") +
+  ylab("percentage") +
   ggsave("./plots/3.png") +
   ggsave("./plots/3.pdf")
 
@@ -111,12 +116,117 @@ tmp %>% filter(race=="White" | race=="Black") %>% filter(key=="unarmed") %>%
 ggplot(aes(x=race, y=value*100, fill=race)) +
   geom_bar(stat="identity") + #, position="dodge") +
   geom_errorbar(limits, width=.25) +
-  ylab("percent of unarmed victims") +
+  ylab("percent of unarmed victims within race") +
   ggtitle("              Percent of unarmed victims shot by police by race") +
+  theme(legend.position="none") +
   ggsave("./plots/4.png") +
   ggsave("./plots/4.pdf")
 
 
+# White: 4.54% - 7.6%
+# Black: 8.95% - 14.63%
 
 
+#--------------------------------------------------#
+#--------------------------------------------------#
+
+# bayesian modeling of the probabilities that a white or
+# black target of a shooting would be unarmed
+
+library(rstan)
+library(rethinking)
+rstan_options(auto_write = FALSE)
+
+
+by.race %<>% mutate(raw.unarmed=raw.know.armp-raw.armed)
+by.race$racenum <- 1:nrow(by.race)
+xwalk <- by.race %>% select(race, racenum)
+by.race %>% transmute(racenum, raw_unarmed=raw.unarmed,
+                      raw_know_armp=raw.know.armp) -> d2
+
+
+
+nhmod <- stan(file='./models/non-heirarchical-model.stan',
+              data=append(data.frame(d2), list(N=5, N_racenum=5)),
+              iter=1000000, chains=1)
+
+traceplot(nhmod, pars=c("race[1]", "race[2]", "race[3]",
+                        "race[4]", "race[5]"))
+plot(nhmod)
+
+
+get_sampler_params(nhmod, inc_warmup=FALSE)
+summary(nhmod)$summary
+
+
+nhsamps <- extract.samples(nhmod, n=100000)
+nhsrace <- data.frame(logistic(nhsamps$race))
+names(nhsrace) <- xwalk$race
+
+
+options(warn=1)
+
+
+heir <- stan(file='./models/heirarchical-model.stan',
+             data=append(data.frame(d2), list(N=5, N_racenum=5)),
+             iter=1000000, chains=1,
+             control=list(adapt_delta=0.9999))
+
+
+traceplot(heir, pars=c("races[1]", "races[2]", "races[3]",
+                       "races[4]", "races[5]", "a", "sigma"))
+
+
+samps <- extract.samples(heir, n=100000)
+srace <- data.frame(logistic(samps$races))
+names(srace) <- xwalk$race
+sa <- logistic(samps$a)
+
+
+
+
+HPDI(srace$White, prob=0.95) -> cihwhite
+HPDI(srace$Black, prob=0.95) -> cihblack
+
+HPDI(nhsrace$White, prob=0.95) -> cinhwhite
+HPDI(nhsrace$Black, prob=0.95) -> cinhblack
+
+
+
+plot(density(nhsrace$White), lwd=2, lty=1, col="red", xlim=c(0, .2),
+     ylim=c(-4, 50),
+     main="posterior distribution of probability between target race",
+     # ylab="probability density",
+     ylab=NA,
+     xlab="probability of targets being unarmed",
+     yaxt='n')
+lines(density(nhsrace$Black), lwd=2, lty=1, col="blue")
+
+
+lines(density(srace$White), lwd=2, lty=2, col="red")
+lines(density(srace$Black), lwd=2, lty=2, col="blue")
+lines(density(sa), lwd=1, lty=3)
+
+lines(c(cinhwhite[1], cinhwhite[2]), c(-2, -2), col="red", lwd=2)
+lines(c(cinhwhite[1], cinhwhite[1]), c(-3, -1), col="red", lwd=2)
+lines(c(cinhwhite[2], cinhwhite[2]), c(-3, -1), col="red", lwd=2)
+
+lines(c(cinhblack[1], cinhblack[2]), c(-2, -2), col="blue", lwd=2)
+lines(c(cinhblack[1], cinhblack[1]), c(-3, -1), col="blue", lwd=2)
+lines(c(cinhblack[2], cinhblack[2]), c(-3, -1), col="blue", lwd=2)
+
+
+lines(c(cihwhite[1], cihwhite[2]), c(-4, -4), col="red", lwd=1, lty=2)
+lines(c(cihblack[1], cihblack[2]), c(-4, -4), col="blue", lwd=1, lty=2)
+
+
+text(x=mean(cinhwhite), y=-2, labels="█████", col="white")
+text(x=mean(cinhwhite), y=-2, labels="white")
+text(x=mean(cinhblack), y=-2, labels="█████", col="white")
+text(x=mean(cinhblack), y=-2, labels="black")
+
+dev.copy(png,'plots/post.png')
+dev.off()
+dev.copy(pdf,'plots/post.pdf')
+dev.off()
 
