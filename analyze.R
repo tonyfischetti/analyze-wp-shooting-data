@@ -27,7 +27,11 @@ library(dplyr)
 library(readr)
 library(ggplot2)
 library(tidyr)
+library(parallel)
 
+
+download.file("https://raw.githubusercontent.com/washingtonpost/data-police-shootings/master/fatal-police-shootings-data.csv",
+              destfile="./data/fatal-police-shootings-data.csv")
 
 dat <- read_csv("./data/fatal-police-shootings-data.csv") %>%
   mutate(race=ifelse(race=='A', "Asian",
@@ -92,8 +96,10 @@ ggplot(tmp, aes(x=race, y=value*100, fill=key)) +
   ggsave("./plots/3.pdf")
 
 
+
 #--------------------------------------------------#
-# bootstrapping percentages
+# bootstrapping percentages (for "armed" status only)
+
 dat %>% filter(!is.na(armp)) %>% filter(race=="Black") %>% {.$armp} -> black
 dat %>% filter(!is.na(armp)) %>% filter(race=="White") %>% {.$armp} -> white
 
@@ -123,8 +129,39 @@ ggplot(aes(x=race, y=value*100, fill=race)) +
   ggsave("./plots/4.pdf")
 
 
-# White: 4.54% - 7.6%
-# Black: 8.95% - 14.63%
+# White: 4.2% - 7.1%
+# Black: 8.5% - 14.2%
+
+#--------------------------------------------------#
+
+
+#--------------------------------------------------#
+# bootstrapping percentages (for "armed" and "not attacking")
+
+dat %<>% mutate(armed.or.fleeing.p = ifelse(dat$armed=="unarmed" & dat$threat_level!="attack", FALSE, TRUE))
+
+dat %>% filter(!is.na(armed.or.fleeing.p)) %>% filter(race=="Black") %>% {.$armed.or.fleeing.p} -> black
+dat %>% filter(!is.na(armed.or.fleeing.p)) %>% filter(race=="White") %>% {.$armed.or.fleeing.p} -> white
+
+das.boot <- boot(black, function(x, i){ sum(!x[i])/length(black) }, 100000, 
+                 parallel="multicore", ncpus=4)
+boot.ci(das.boot, type="bca") -> bcablack
+
+das.boot <- boot(white, function(x, i){ sum(!x[i])/length(white) }, 100000, 
+                 parallel="multicore", ncpus=4)
+boot.ci(das.boot, type="bca") -> bcawhite
+
+
+# White: 2.3% - 4.5%
+# Black: 4.7% - 9.1%
+
+#--------------------------------------------------#
+
+
+
+
+
+
 
 
 #--------------------------------------------------#
@@ -194,7 +231,7 @@ HPDI(nhsrace$Black, prob=0.95) -> cinhblack
 
 
 plot(density(nhsrace$White), lwd=2, lty=1, col="red", xlim=c(0, .2),
-     ylim=c(-4, 50),
+     ylim=c(-4, 55),
      main="posterior distribution of probability between target race",
      # ylab="probability density",
      ylab=NA,
@@ -229,4 +266,18 @@ dev.copy(png,'plots/post.png')
 dev.off()
 dev.copy(pdf,'plots/post.pdf')
 dev.off()
+
+
+
+
+# how many unarmed black people might be alive
+# today if there were no racial bias?
+
+num.ppl.no.bias <- nhsrace$White * 460
+num.ppl.bias <- nhsrace$Black * 460
+
+num.ppl.bias - num.ppl.no.bias -> difference
+hist(difference)
+plot(density(difference))
+
 
